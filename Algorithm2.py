@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 """
+Created on Sat Apr 19 16:03:04 2025
+
+@author: COMEDIA
+"""
+
+# -*- coding: utf-8 -*-
+"""
 Created on Mon May  6 22:08:58 2024
 
 @author: COMEDIA
@@ -165,14 +172,8 @@ def forward(chi_spec, chi_image, E_pr):
 # ############################
 
 # grad descend param set
-n_iter = 50000
+n_iter = 40000
 
-step = 0.1e1
-normed_grad_step = True
-noisy_grad = True
-
-if noisy_grad:
-    noise_weight = 0.01
 
 n_spec = random_mask.size()[1]
 n_s = Y.size()[0]*Y.size()[1] 
@@ -196,68 +197,38 @@ print(f"chi_spec_est \t{chi_spec_est.shape}") # pixels, masks, freqs
 print(f"chi_image_est \t{chi_image_est.shape}") # pixels, masks, freqs
 
 # gradient descent
-loss_vec = []
+
 criterion = nn.MSELoss()
+optimizer = torch.optim.Adam([chi_image_est], lr=0.0005) 
 
-spec_grad_norms = []
-image_grad_norms = []
+loss_vec = []
+zeros_for_chi_image_est = 1j * torch.zeros_like(chi_image_est)
 
-zeros_for_chi_image_est = 1j*torch.zeros_like(chi_image_est)
+for i_iter in tqdm(range(n_iter)):
+    Y_est = forward(chi_spec=chi_spec_est, 
+                    chi_image=chi_image_est + zeros_for_chi_image_est, 
+                    E_pr=E_avg_pr)
 
-# Params for a hacky way to reduce step size when cycles in loss occur
-rearview = 10
-max_inc = 4
-step_reduce = 0.8
-last_reduced_step = -np.inf
-
-# ##########################################
-# Set the normalization Mode
-# See brief description next to each for what they do
-# ##########################################
-
-for i_iter in tqdm(range(n_iter)): 
-    # Forward
-
-    Y_est = forward(chi_spec = chi_spec_est, 
-                    chi_image = chi_image_est + zeros_for_chi_image_est, 
-                    E_pr = E_avg_pr) #E_pr
-    # Backprop loss
     loss = criterion(Y_est, Y)
     loss_vec.append(loss.item())
+
+    optimizer.zero_grad()
     loss.backward()
-             
-    # Update
+    optimizer.step()
+
     with torch.no_grad():
-        if len(loss_vec) > rearview and np.sum(np.array(loss_vec[-rearview:]) - np.array(loss_vec[-rearview-1:-1]) > 0) > max_inc:
-            if (i_iter - 2) > last_reduced_step: # FIXME: get rid of hard coding
-                step *= step_reduce
-                print(f"new step size: {step:0.3e}")
-                last_reduced_step = i_iter
+        chi_image_est.clamp_(min=0)
 
-        # Gradient Step
-        if noisy_grad:
-            chi_image_est += noise_weight * step * torch.randn_like(chi_image_est)
-            
-        if normed_grad_step:
-            chi_image_est -= step * chi_image_est.grad/torch.norm(chi_image_est.grad)
-        else:
-            chi_image_est -= step * chi_image_est.grad
-
-        # Projection                 
-        chi_image_est.data = chi_image_est.clip(min=0) 
+    if i_iter % 5000 == 0:
+        grad_norm = torch.norm(chi_image_est.grad).item()
+        print(f"[{i_iter}] loss = {loss.item():.4e}, grad norm = {grad_norm:.4e}")
         
-    # Reset gradients       
-    chi_image_est.grad.zero_() 
-
-chi = torch.matmul(chi_spec_est, chi_image_est+1j*torch.zeros_like(chi_image_est)).T.unsqueeze(1)
 
 vmin = min(chi_image_est[i].detach().cpu().min().item() for i in range(r))
 vmax = max(chi_image_est[i].detach().cpu().max().item() for i in range(r))
 
-fig, ax = plt.subplots(1,r, figsize=( r*2  ,3), dpi=150)
-
+fig, ax = plt.subplots(1, r, figsize=(r*2, 3), dpi=150)
 for i in range(r):
-    ax[i].imshow(chi_image_est[i].reshape(imsize,imsize).detach().cpu().numpy(), cmap='gray',vmin=vmin, vmax=vmax)
-    ax[i].set_title(f'EigImage {i}')
-    
+    ax[i].imshow(chi_image_est[i].reshape(imsize, imsize).detach().cpu().numpy(), cmap='gray', vmin = vmin,  vmax = 0.3)
+    ax[i].set_title(f"EigImage {i}")
 fig.suptitle('Reconstructed Eigen Images')
