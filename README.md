@@ -7,6 +7,7 @@ Authors: Shupeng Zhao//Lea Chibani//Edward Chandler//Fangyu Liu//Jianqi Hu//Lore
 
 contact: spzhao0724@gmail.com   //  version 11/2024
 
+System used Windows 10 Python 3.9+, Anaconda 2023.03+ PyTorch 2.0.1 (CUDA 11.7) GPU: 2× NVIDIA GeForce RTX 2080 Ti RAM: 64 GB
 
 The function of "Algorithm1" and "Algorithm2" are described in the paper "Computational field-resolved coherent chemical imaging".
 
